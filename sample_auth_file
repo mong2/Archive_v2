@@ -1,0 +1,4 @@
+[client]
+api_hostname = https://api.cloudpassage.com
+key_id =
+secret_key =
