@@ -51,7 +51,7 @@ class CmdLine:
 class ArchiveData:
 	def __init__(self):
 		config = ConfigParser.ConfigParser()
-		config.read(self.authFilename)
+		config.read(cmd.authFilename)
 
 		key_id = config.get('client','key_id')
 		secret_key = config.get('client', 'secret_key')
@@ -142,7 +142,7 @@ class ArchiveData:
 				if not os.path.exists(os.path.dirname(filename)):
 					os.makedirs(os.path.dirname(filename))
 				with open(filename, "w") as f:
-					json.dump(scan_data, f)
+					json.dump(data, f)
 		return None
 
 	def run(self, cmd):
