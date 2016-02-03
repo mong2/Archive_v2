@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# modified date : 2015-02-03
+
 import sys
 import os
 import re
@@ -13,9 +16,10 @@ start_time = time.time()
 class CmdLine:
     def __init__(self):
         self.authFilename = "archive.auth"
-        self.starting = None
+        self.starting = time.strftime("%Y-%m-%d")
         self.ending = None
         self.reportModule = None
+        self.output_path = os.getcwd()
         self.allowedReportTypes = ["sva", "csm", "fim", "sam"]
 
     def processArgs(self, argv):
@@ -32,6 +36,8 @@ class CmdLine:
                 self.base = arg.split("=")[1]
             elif (arg.startswith("--reportType")):
                 self.reportModule = arg.split("=")[1]
+            elif (arg.startswith("--output_path")):
+            	self.output_path = arg.split("=")[1]
             elif (arg == "-h") or (arg == "-?"):
                 allOK = False
             else:
@@ -42,10 +48,11 @@ class CmdLine:
     def usage(self, progname):
         print >> sys.stderr, "Usage: %s [flag] [...]" % os.path.basename(progname)
         print >> sys.stderr, "Where flag is one or more of the following options:"
-        print >> sys.stderr, "--auth=<filename>\tSpecify name of file containing API credentials"
-        print >> sys.stderr, "--starting=<datetime>\tSpecify a no-earlier-than date for issues (ISO8601)"
+        print >> sys.stderr, "--auth=<filename>\tSpecify name of file containing API credentials. "
+        print >> sys.stderr, "--starting=<datetime>\tSpecify a no-earlier-than date for issues (ISO8601).Defsult setting will be current date"
         print >> sys.stderr, "--ending=<datetime>\tSpecify a no-later-than date for issues (ISO8601)"
         print >> sys.stderr, "--reportType=<type>\tSpecify type of report, allowed = %s" % self.allowedReportTypes
+        print >> sys.stderr, "--output_path=<file_path>\t\tSpecify the file directory for archived scans. The default file path is the same as Archive_v2"
 
 
 class ArchiveData:
@@ -62,7 +69,7 @@ class ArchiveData:
 		token = oauth.get_token(key_id, secret_key)
 
 		self.api = Api(token)
-		self.directory = os.getcwd()
+		self.directory = cmd.output_path
 		return None
 
 	def create_module_dictionary(self):
@@ -86,21 +93,26 @@ class ArchiveData:
 				url += "&until=%s" % (cmd.ending)
 		return url
 
-	def get_issues(self, endoint):
+	def get_issues(self, endpoint):
 		module_dictionary = {}
+		server_list = []
+
 		pagination = True
 		count = 1
-		full_path = "v2/issues" + endoint
-
+		full_path = "v2/issues" + endpoint
 		while pagination == True:
-			resp = self.api.get(full_path + "&per_page=100&page=%d" % (count))
+			if '?' in full_path:
+				resp = self.api.get(full_path + "&per_page=100&page=%d" % (count))
+			else:
+				resp = self.api.get(full_path + "?per_page=100&page=%d" % (count))
+
 			if resp.status_code != 200:
 				print "Error: %s" % resp.status_code
 				break
 			else:
 				data = resp.json()
 
-			if "next" not in data["pagination"]:
+			if data["pagination"]["next"]:
 				pagination = False
 			else:
 				count += 1
@@ -117,12 +129,14 @@ class ArchiveData:
 				else:
 					agent_url = i["agent_url"] + '/' + issue_type
 				agent_url = agent_url.split('com/')[1]
+				server_url = i["agent_url"].split('com/')[1]
 
 				module_dictionary.setdefault(issue_type,[])
 				if agent_url not in module_dictionary[issue_type]:
 					module_dictionary[issue_type].append(str(agent_url))
-
-		return module_dictionary
+				if server_url not in server_list:
+					server_list.append(str(server_url))
+		return module_dictionary, server_list
 
 	def get_detail(self, module_dictionary):
 		for k in module_dictionary:
@@ -136,8 +150,8 @@ class ArchiveData:
 					data = resp.json()
 					if "scan" in data:
 						scan_data = data["scan"]
-				scan_time = dateutil.parser.parse(scan_data["created_at"])
-				filename = self.directory + "/output/" + str(scan_time.year) + '-' + str(scan_time.month) + '-' + str(scan_time.day)
+				self.scan_time = dateutil.parser.parse(scan_data["created_at"])
+				filename = self.directory + "/output/" + str(self.scan_time.year) + '-' + str(self.scan_time.month) + '-' + str(self.scan_time.day)
 				filename += '/' + scan_data["server_hostname"] + '/' + scan_data["module"] + "--" + scan_data["id"] + ".json"
 				if not os.path.exists(os.path.dirname(filename)):
 					os.makedirs(os.path.dirname(filename))
@@ -145,12 +159,35 @@ class ArchiveData:
 					json.dump(data, f)
 		return None
 
+	def get_server_info(self, server_list):
+		for server in server_list:
+			resp = self.api.get(server)
+			if resp.status_code != 200:
+				print "Error: %s" % resp.status_code
+				break
+			else:
+				data = resp.json()
+				if "server" in data:
+					print data["server"]["hostname"]
+					filename = self.directory + "/output/" + str(self.scan_time.year) + '-' + str(self.scan_time.month) + '-' + str(self.scan_time.day)
+					filename += '/' + data["server"]["hostname"] + '/' + "server_info.json"
+					print filename
+					if not os.path.exists(os.path.dirname(filename)):
+						os.makedirs(os.path.dirname(filename))
+					with open(filename, "w") as f:
+						json.dump(data, f)
+		return None
+
 	def run(self, cmd):
 		endpoint = self.get_url()
+		print "Output will be store in %s" % cmd.output_path
 		print "---- Collecting all the issues ----"
-		module_dictionary = self.get_issues(endpoint)
+		module_dictionary,server_list = self.get_issues(endpoint)
+		print module_dictionary
 		print "---- Writing all the issues into files -----"
 		self.get_detail(module_dictionary)
+		print "---- Writing all the server information ----"
+		self.get_server_info(server_list)
 		return None
 
 if __name__ == "__main__":
