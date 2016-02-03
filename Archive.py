@@ -168,10 +168,8 @@ class ArchiveData:
 			else:
 				data = resp.json()
 				if "server" in data:
-					print data["server"]["hostname"]
 					filename = self.directory + "/output/" + str(self.scan_time.year) + '-' + str(self.scan_time.month) + '-' + str(self.scan_time.day)
 					filename += '/' + data["server"]["hostname"] + '/' + "server_info.json"
-					print filename
 					if not os.path.exists(os.path.dirname(filename)):
 						os.makedirs(os.path.dirname(filename))
 					with open(filename, "w") as f:
@@ -183,7 +181,6 @@ class ArchiveData:
 		print "Output will be store in %s" % cmd.output_path
 		print "---- Collecting all the issues ----"
 		module_dictionary,server_list = self.get_issues(endpoint)
-		print module_dictionary
 		print "---- Writing all the issues into files -----"
 		self.get_detail(module_dictionary)
 		print "---- Writing all the server information ----"
