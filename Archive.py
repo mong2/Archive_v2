@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# modified date : 2015-02-03
+# modified date : 2015-02-03 v2
 
 import sys
 import os
@@ -60,17 +60,20 @@ class ArchiveData:
 		config = ConfigParser.ConfigParser()
 		config.read(cmd.authFilename)
 
-		key_id = config.get('client','key_id')
-		secret_key = config.get('client', 'secret_key')
+		self.key_id = config.get('client','key_id')
+		self.secret_key = config.get('client', 'secret_key')
 
-		api_hostname = config.get('client', 'api_hostname')
+		self.api_hostname = config.get('client', 'api_hostname')
 
-		oauth = APIToken(api_hostname)
-		token = oauth.get_token(key_id, secret_key)
-
-		self.api = Api(token)
 		self.directory = cmd.output_path
 		return None
+
+	def authentication(self):
+		oauth = APIToken(self.api_hostname)
+		token = oauth.get_token(self.key_id, self.secret_key)
+		print token
+		self.api = Api(token)
+		return self.api
 
 	def create_module_dictionary(self):
 		module_dictionary = {}
@@ -112,10 +115,10 @@ class ArchiveData:
 			else:
 				data = resp.json()
 
-			if data["pagination"]["next"]:
-				pagination = False
-			else:
+			if "next" in data["pagination"]:
 				count += 1
+			else:
+				pagination = False
 
 			if "issues" in data:
 				issue_data = data["issues"]
@@ -134,6 +137,7 @@ class ArchiveData:
 				module_dictionary.setdefault(issue_type,[])
 				if agent_url not in module_dictionary[issue_type]:
 					module_dictionary[issue_type].append(str(agent_url))
+
 				if server_url not in server_list:
 					server_list.append(str(server_url))
 		return module_dictionary, server_list
@@ -142,41 +146,50 @@ class ArchiveData:
 		for k in module_dictionary:
 			server_list = module_dictionary[k]
 			for i in server_list:
-				resp = self.api.get(i)
-				if resp.status_code != 200:
-					print "Error: %s" % resp.status_code
+				while True:
+					try:
+						resp = self.api.get(i)
+						if resp.status_code == 200:
+							data = resp.json()
+					except:
+						print "Error: %d. Retrying..." % resp.status_code
+						self.authentication()
+						continue
 					break
-				else:
-					data = resp.json()
-					if "scan" in data:
-						scan_data = data["scan"]
-				self.scan_time = dateutil.parser.parse(scan_data["created_at"])
-				filename = self.directory + "/output/" + str(self.scan_time.year) + '-' + str(self.scan_time.month) + '-' + str(self.scan_time.day)
-				filename += '/' + scan_data["server_hostname"] + '/' + scan_data["module"] + "--" + scan_data["id"] + ".json"
-				if not os.path.exists(os.path.dirname(filename)):
-					os.makedirs(os.path.dirname(filename))
-				with open(filename, "w") as f:
-					json.dump(data, f)
-		return None
-
-	def get_server_info(self, server_list):
-		for server in server_list:
-			resp = self.api.get(server)
-			if resp.status_code != 200:
-				print "Error: %s" % resp.status_code
-				break
-			else:
-				data = resp.json()
-				if "server" in data:
+				if "scan" in data:
+					scan_data = data["scan"]
+					self.scan_time = dateutil.parser.parse(scan_data["created_at"])
 					filename = self.directory + "/output/" + str(self.scan_time.year) + '-' + str(self.scan_time.month) + '-' + str(self.scan_time.day)
-					filename += '/' + data["server"]["hostname"] + '/' + "server_info.json"
+					filename += '/' + scan_data["server_hostname"] + '/' + scan_data["module"] + "--" + scan_data["id"] + ".json"
 					if not os.path.exists(os.path.dirname(filename)):
 						os.makedirs(os.path.dirname(filename))
 					with open(filename, "w") as f:
 						json.dump(data, f)
 		return None
 
+	def get_server_info(self, server_list):
+		for server in server_list:
+		    while True:
+        		try:
+					resp = self.api.get(server)
+					if resp.status_code == 200:
+						data = resp.json()
+		        except:
+		        	print "Error: %d. Retrying..." % resp.status_code
+		        	self.authentication()
+		        	continue
+       			break
+			if "server" in data:
+				filename = self.directory + "/output/" + str(self.scan_time.year) + '-' + str(self.scan_time.month) + '-' + str(self.scan_time.day)
+				filename += '/' + data["server"]["hostname"] + '/' + "server_info.json"
+				if not os.path.exists(os.path.dirname(filename)):
+					os.makedirs(os.path.dirname(filename))
+				with open(filename, "w") as f:
+					json.dump(data, f)
+		return None
+
 	def run(self, cmd):
+		self.authentication()
 		endpoint = self.get_url()
 		print "Output will be store in %s" % cmd.output_path
 		print "---- Collecting all the issues ----"
