@@ -16,11 +16,11 @@ start_time = time.time()
 class CmdLine:
     def __init__(self):
         self.authFilename = "archive.auth"
-        self.starting = time.strftime("%Y-%m-%d")
+        self.starting = None
         self.ending = None
         self.reportModule = None
         self.output_path = os.getcwd()
-        self.allowedReportTypes = ["sva", "csm", "fim", "sam"]
+        self.allowedReportTypes = ["sva", "csm", "fim", "sam", "agent", "fw"]
 
     def processArgs(self, argv):
         allOK = True
@@ -66,12 +66,12 @@ class ArchiveData:
 		self.api_hostname = config.get('client', 'api_hostname')
 
 		self.directory = cmd.output_path
+		self.scan_time = None
 		return None
 
 	def authentication(self):
 		oauth = APIToken(self.api_hostname)
 		token = oauth.get_token(self.key_id, self.secret_key)
-		print token
 		self.api = Api(token)
 		return self.api
 
@@ -120,8 +120,9 @@ class ArchiveData:
 					count += 1
 				else:
 					pagination = False
+			else:
+				pagination = False
 
-			print data['count']
 			if "issues" in data:
 				issue_data = data["issues"]
 
@@ -197,7 +198,7 @@ class ArchiveData:
 		print "---- Collecting all the issues ----"
 		module_dictionary,server_list = self.get_issues(endpoint)
 		print "---- Writing all the issues into files -----"
-		# self.get_detail(module_dictionary)
+		self.get_detail(module_dictionary)
 		print "---- Writing all the server information ----"
 		self.get_server_info(server_list)
 		return None
