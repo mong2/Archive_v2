@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# modified date : 2015-02-03 v2
+# modified date : 2015-02-04 v3
 
 import sys
 import os
@@ -120,6 +120,7 @@ class ArchiveData:
 			else:
 				pagination = False
 
+			print data['count']
 			if "issues" in data:
 				issue_data = data["issues"]
 
@@ -149,13 +150,15 @@ class ArchiveData:
 				while True:
 					try:
 						resp = self.api.get(i)
-						if resp.status_code == 200:
-							data = resp.json()
-					except:
-						print "Error: %d. Retrying..." % resp.status_code
+						if resp.status_code != 200:
+							raise ValueError(resp.status_code)
+						data = resp.json()
+					except ValueError as e:
+						print "Error: %s. Retrying...." % e
 						self.authentication()
 						continue
 					break
+
 				if "scan" in data:
 					scan_data = data["scan"]
 					self.scan_time = dateutil.parser.parse(scan_data["created_at"])
@@ -170,18 +173,16 @@ class ArchiveData:
 	def get_server_info(self, server_list):
 		for server in server_list:
 		    while True:
-        		try:
-					resp = self.api.get(server)
-					if resp.status_code == 200:
-						data = resp.json()
-		        except:
-		        	print "Error: %d. Retrying..." % resp.status_code
-		        	self.authentication()
-		        	continue
-       			break
-			if "server" in data:
-				filename = self.directory + "/output/" + str(self.scan_time.year) + '-' + str(self.scan_time.month) + '-' + str(self.scan_time.day)
-				filename += '/' + data["server"]["hostname"] + '/' + "server_info.json"
+		    	resp = self.api.get(server)
+		    	if resp.status_code != 200:
+		    		print "Error: %s Retrying..." % resp.status_code
+		    		self.authentication()
+		    		continue
+		    	data = resp.json()
+		    	break
+		    if "server" in data:
+				filename = self.directory + "/output/" + str(self.scan_time.year) + "-" + str(self.scan_time.month) + '-' + str(self.scan_time.day)
+				filename += '/' + data["server"]["hostname"]+"/server_info.json"
 				if not os.path.exists(os.path.dirname(filename)):
 					os.makedirs(os.path.dirname(filename))
 				with open(filename, "w") as f:
@@ -195,7 +196,7 @@ class ArchiveData:
 		print "---- Collecting all the issues ----"
 		module_dictionary,server_list = self.get_issues(endpoint)
 		print "---- Writing all the issues into files -----"
-		self.get_detail(module_dictionary)
+		# self.get_detail(module_dictionary)
 		print "---- Writing all the server information ----"
 		self.get_server_info(server_list)
 		return None
