@@ -115,10 +115,11 @@ class ArchiveData:
 			else:
 				data = resp.json()
 
-			if "next" in data["pagination"]:
-				count += 1
-			else:
-				pagination = False
+			if "pagination" in data:
+				if "next" in data["pagination"]:
+					count += 1
+				else:
+					pagination = False
 
 			print data['count']
 			if "issues" in data:
