@@ -14,13 +14,14 @@ class APIToken:
 			endpoint = self.api_url + '/' + url
 			headers = {"Authorization": str("Basic " + base64str)}
 			resp = requests.post(endpoint, headers=headers)
-			if resp.status_code == 200:
-				data = resp.json()
-				return data["access_token"]
-		except:
-			try:
-				resp = requests.post(endpoint, headers=headers)
-			except resp.status_code != 200:
+			if resp.status_code != 200:
+				raise ValueError(resp.status_code)
+			data = resp.json()
+			return data["access_token"]
+		except ValueError as e:
+			print "Error: %s. Retrying...." % e
+			resp = requests.post(endpoint, headers=headers)
+			if resp.status_code != 200:
 				print "ERROR: get_token %s" % (resp.status_code)
 		return None
 
