@@ -9,10 +9,14 @@ import time
 import util
 import ConfigParser
 import dateutil.parser
+import logbook
 from datetime import date
 from api import Api
 from oauth import APIToken
 
+logger = logbook.Logger('archive')
+log = logbook.FileHandler('monitoring.log')
+log.push_application()
 
 start_time = time.time()
 
@@ -33,9 +37,6 @@ class CmdLine:
             elif (arg.startswith("--starting")):
                 self.starting = arg.split("=")[1]
                 util.verifyISO8601(self.starting)
-            # elif (arg.startswith("--ending")):
-            #     self.ending = arg.split("=")[1]
-            #     util.verifyISO8601(self.ending)
             elif (arg.startswith("--base=")):
                 self.base = arg.split("=")[1]
             elif (arg.startswith("--reportType")):
@@ -55,7 +56,6 @@ class CmdLine:
         print >> sys.stderr, "Where flag is one or more of the following options:"
         print >> sys.stderr, "--auth=<filename>\tSpecify name of file containing API credentials. "
         print >> sys.stderr, "--starting=<datetime>\tSpecify a no-earlier-than date for issues (ISO8601).Defsult setting will be current date"
-        # print >> sys.stderr, "--ending=<datetime>\tSpecify a no-later-than date for issues (ISO8601)"
         print >> sys.stderr, "--reportType=<type>\tSpecify type of report, allowed = %s" % self.allowedReportTypes
         print >> sys.stderr, "--output_path=<file_path>\t\tSpecify the file directory for archived scans. The default file path is the same as Archive_v2"
 
@@ -168,17 +168,18 @@ class ArchiveData:
 		count = 1
 		full_path = "v2/issues" + endpoint
 		while pagination == True:
-			if '?' in full_path:
-				resp = self.api.get(full_path + "&per_page=100&page=%d" % (count))
-			else:
-				resp = self.api.get(full_path + "?per_page=100&page=%d" % (count))
 			while True:
 				try:
+					if '?' in full_path:
+						resp = self.api.get(full_path + "&per_page=100&page=%d" % (count))
+					else:
+						resp = self.api.get(full_path + "?per_page=100&page=%d" % (count))
 					if resp.status_code != 200:
 						raise ValueError(resp.status_code)
 					data = resp.json()
 				except ValueError as e:
 					print "Error: %s. Retrying...." % e
+					logger.info("Error: %s. Retrying...." %e)
 					self.authentication()
 					continue
 				break
@@ -230,6 +231,7 @@ class ArchiveData:
 						data = resp.json()
 					except ValueError as e:
 						print "Error: %s. Retrying...." % e
+						logger.info("Error: %s. Retrying...." %e)
 						self.authentication()
 						continue
 					break
@@ -272,6 +274,7 @@ class ArchiveData:
 					data = resp.json()
 				except ValueError as e:
 					print "Error: %s. Retrying...." % e
+					logger.info("Error: %s. Retrying...." %e)
 					self.authentication()
 					continue
 				break
@@ -283,13 +286,15 @@ class ArchiveData:
 		self.authentication()
 		endpoint = self.get_url()
 		print "Output will be store in %s" % cmd.output_path
+		logger.info("Output will be store in %s" % cmd.output_path)
 		print "---- Collecting all the issues ----"
+		logger.info("---- Collecting all the issues ----")
 		module_dictionary,server_list = self.get_issues(endpoint)
-		# issues_list = self.get_issues_2(endpoint)
 		print "---- Writing all the issues into files -----"
-		# self.get_issues_detail(issues_list)
+		logger.info("---- Writing all the issues into file ----")
 		self.get_detail(module_dictionary)
 		print "---- Writing all the server information ----"
+		logger.info("---- Writing all the server information ----")
 		self.get_server_info(server_list)
 		return None
 
@@ -300,4 +305,5 @@ if __name__ == "__main__":
 	else:
 		resp = ArchiveData()
 		resp.run(cmd)
-	print ("--- %s seconds ---" % (time.time() - start_time))
+	print ("---- %s seconds ----" % (time.time() - start_time))
+	logger.info("---- %s seconds ----" % (time.time() - start_time))
