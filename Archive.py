@@ -60,11 +60,11 @@ class ArchiveData:
         self.api = cpapi.CPAPI()
         print "Saving output files to %s" % CMD.output_path
 
-    def list_servers(self):
+    def list_servers(self, module):
         count = 1
         server_list = []
         finish = False
-        url = "%s:%d/v1/servers?per_page=5&page=1" %(self.api.base_url, self.api.port)
+        url = "%s:%d/v2/issues?issue_type=%s&group_by=agent_id&per_page=5&page=1" %(self.api.base_url, self.api.port, module)
         (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
         if data:
             LOGGER.info("First API was successful! Data is good.")
@@ -78,14 +78,14 @@ class ArchiveData:
                 LOGGER.info("Successfully retreive server list from %d" % url)
             count += 1
         while(data != None) and (finish == False):
-            if 'servers' in data:
-                list_servers = json.loads(data)
-                servers = list_servers['servers']
-                for server in servers:
-                    server_list.append((server['id'], server))
-                if 'pagination' in list_servers:
-                    if 'next' in list_servers['pagination']:
-                        url = list_servers['pagination']['next']
+            if 'issues' in data:
+                list_issues = json.loads(data)
+                issues = list_issues['issues']
+                for issue in issues:
+                    server_list.append(issue['agent_id'])
+                if 'pagination' in list_issues:
+                    if 'next' in list_issues['pagination']:
+                        url = list_issues['pagination']['next']
                         count_pagingation = 1
                         (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
                         while (data is None) and (count_pagingation < 4):
@@ -105,7 +105,7 @@ class ArchiveData:
         return server_list
 
     def get_server_module(self, server_list, module):
-        for server_id, server_info in server_list:
+        for server_id in server_list:
             new_findings = []
             count = 1
             url = "%s:%d/v1/servers/%s/%s" % (self.api.base_url, self.api.port, server_id, module)
@@ -128,17 +128,39 @@ class ArchiveData:
                             if finding['status'] == 'bad':
                                 new_findings.append(finding)
                         if new_findings:
+                            if module == 'svm':
+                                for new_finding in new_findings:
+                                    new_finding['age'] = self.get_sva_duration(new_finding['package_name'], scan_data['id'])
                             scan_data['scan']['findings'] = new_findings
                             cputils.write_file(CMD.output_path, scan_time, scan_data, False)
                             LOGGER.info("Successfully archive %s scan from: %s" % (module, url))
 
             else:
                 LOGGER.warn("Failed to connect to %s" % url)
-            if server_info:
-                cputils.write_file(CMD.output_path, scan_time, server_info, True)
-                LOGGER.info("Successfully download the server information: %s" % url)
         return None
 
+    def get_sva_duration(self, name, agent_id):
+        count = 1
+        url = "%s:%d/v2/issues?issue_type=sva&name=%s&agent_id=%s" % (self.api.base_url, self.api.port, name, agent_id)
+        (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
+        while (data is None) and (count < 4):
+            self.api.authenticateClient()
+            LOGGER.warn(err_msg)
+            LOGGER.warn("retry: %d time" % count + "on %s" % url)
+            (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
+            if data: 
+                LOGGER.info("Successfully retreive issue from %s" % url)
+            count += 1
+        if data: 
+            issue_data = json.loads(data)
+            if 'issues' in issue_data:
+                issues = issue_data['issues']
+                for issue in issues:
+                    created_at = dateutil.parser.parse(issue['created_at'])
+                    last_seen = dateutil.parser.parse(issue['last_seen_at'])
+                    duration = last_seen - created_at
+        return str(duration.days)
+        
     def module_transfer(self, report_module):
         server_module = []
         report_module = report_module.replace(" ", "")
@@ -181,13 +203,19 @@ class ArchiveData:
         if server_module:
             print "Start archiving issues."
             LOGGER.info("start archiving issues.")
-            server_list = self.list_servers()
-            print "--- %s servers ---" % (len(server_list))
-            LOGGER.info("--- %s servers ---" % (len(server_list)))
+            csm_server_list = self.list_servers('csm')
+            sva_server_list = self.list_servers('sva')
+            print "--- %s servers that have issues in csm ---" % (len(csm_server_list))
+            print "--- %s servers that have issues in sva ---" % (len(sva_server_list))
+            LOGGER.info("--- %s servers that have issues in csm ---" % (len(csm_server_list)))
+            LOGGER.info("--- %s servers that have issues in sva ---" % (len(sva_server_list)))
             for module in server_module:
                 print "Start archiving %s scan result" % module
                 temp = "t_%s" % module
-                temp = self.multi_threading(self.get_server_module, server_list, module)
+                if module == 'sca':
+                    temp = self.multi_threading(self.get_server_module, csm_server_list, module)
+                else:
+                    temp = self.multi_threading(self.get_server_module, sva_server_list, module)
                 threads.append(temp)
 
         for thread in threads:
