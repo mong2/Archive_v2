@@ -137,6 +137,23 @@ class ArchiveData:
 
             else:
                 LOGGER.warn("Failed to connect to %s" % url)
+
+            if not cputils.check_path_exist(CMD.output_path, scan_time, scan_data['scan']['server_hostname']):
+                url = "%s:%d/v1/servers/%s" % (self.api.base_url, self.api.port, server_id)
+                (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
+                while (data is None) and (count < 4):
+                    self.api.authenticateClient()
+                    LOGGER.warn(err_msg)
+                    LOGGER.warn("retry: %d time" % count + "on %s" % url)
+                    (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
+                    if data:
+                        LOGGER.info("Successfully retreive server issue from %s" % url)
+                    count += 1
+                if data:
+                    server_data = json.loads(data)
+                    if 'server' in server_data:
+                        cputils.write_file(CMD.output_path, scan_time, server_data, True)
+                        LOGGER.info("Successfully retreive server data from %s" % server_id)    
         return None
 
     def get_sva_duration(self, name, agent_id):
