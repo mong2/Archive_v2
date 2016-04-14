@@ -158,6 +158,7 @@ class ArchiveData:
 
     def get_sva_duration(self, name, agent_id):
         count = 1
+        duration = None
         url = "%s:%d/v2/issues?issue_type=sva&name=%s&agent_id=%s" % (self.api.base_url, self.api.port, name, agent_id)
         (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
         while (data is None) and (count < 4):
@@ -176,7 +177,7 @@ class ArchiveData:
                     created_at = dateutil.parser.parse(issue['created_at'])
                     last_seen = dateutil.parser.parse(issue['last_seen_at'])
                     duration = last_seen - created_at
-        return str(duration.days)
+                    return str(duration.days)
         
     def module_transfer(self, report_module):
         server_module = []
