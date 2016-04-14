@@ -13,11 +13,10 @@ import json
 import cpapi
 
 verbose = False
-
 def write_file(directory, scan_time, data, server_info):
     filename = directory + "/output/" + str(scan_time.year) + '/' + str(scan_time.month) + '/' + str(scan_time.day) + "/"
     if server_info:
-        filename += data['hostname'] + '/server_info.json'
+        filename += data['server']['hostname'] + '/server_info.json'
     else:
         filename += data['scan']['server_hostname'] + '/' + data['scan']['module'] + '--' + data['scan']['id'] + '.json'
 
@@ -27,6 +26,13 @@ def write_file(directory, scan_time, data, server_info):
         json.dump(data,f)
     return None
 
+def check_path_exist(directory, scan_time, hostname):
+    exist = False
+    filename = directory + "/output/" + str(scan_time.year) + '/' + str(scan_time.month) + '/' + str(scan_time.day) + "/"
+    filename += hostname + "/server_info.json"
+    if os.path.exists(filename):
+        exist = True
+    return exist
 def verify_module(modules_str, allowedReportTypes):
     modules = modules_str.split(',')
     for module in modules:
