@@ -16,9 +16,9 @@ verbose = False
 def write_file(directory, scan_time, data, server_info):
     filename = directory + "/output/" + str(scan_time.year) + '/' + str(scan_time.month) + '/' + str(scan_time.day) + "/"
     if server_info:
-        filename += data['server']['hostname'] + '/server_info.json'
+        filename += data['id'] + '/server_info.json'
     else:
-        filename += data['scan']['server_hostname'] + '/' + data['scan']['module'] + '--' + data['scan']['id'] + '.json'
+        filename += data['scan']['server_id'] + '/' + data['scan']['module'] + '--' + data['scan']['id'] + '.json'
 
     if not os.path.exists(os.path.dirname(filename)):
         os.makedirs(os.path.dirname(filename))
@@ -26,10 +26,10 @@ def write_file(directory, scan_time, data, server_info):
         json.dump(data,f)
     return None
 
-def check_path_exist(directory, scan_time, hostname):
+def check_path_exist(directory, scan_time, server_id):
     exist = False
     filename = directory + "/output/" + str(scan_time.year) + '/' + str(scan_time.month) + '/' + str(scan_time.day) + "/"
-    filename += hostname + "/server_info.json"
+    filename += server_id + "/server_info.json"
     if os.path.exists(filename):
         exist = True
     return exist
