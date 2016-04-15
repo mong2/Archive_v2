@@ -104,11 +104,41 @@ class ArchiveData:
                     finish = True
         return server_list
 
-    def get_server_module(self, server_list, module):
-        for server_id in server_list:
-            new_findings = []
-            count = 1
-            url = "%s:%d/v1/servers/%s/%s" % (self.api.base_url, self.api.port, server_id, module)
+    def get_server_module(self, server_id, module):
+        new_findings = []
+        count = 1
+        url = "%s:%d/v1/servers/%s/%s" % (self.api.base_url, self.api.port, server_id, module)
+        (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
+        while (data is None) and (count < 4):
+            self.api.authenticateClient()
+            LOGGER.warn(err_msg)
+            LOGGER.warn("retry: %d time" % count + "on %s" % url)
+            (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
+            if data:
+                LOGGER.info("Successfully retreive server issue from %s" % url)
+            count += 1
+        if data:
+            scan_data = json.loads(data)
+            if 'scan' in scan_data:
+                findings = scan_data['scan']['findings']
+                scan_time = dateutil.parser.parse(scan_data['scan']['created_at'])
+                if findings:
+                    for finding in findings:
+                        if finding['status'] == 'bad':
+                            new_findings.append(finding)
+                    if new_findings:
+                        if module == 'svm':
+                            for new_finding in new_findings:
+                                new_finding['age'] = self.get_sva_duration(new_finding['package_name'], scan_data['id'])
+                        scan_data['scan']['findings'] = new_findings
+                        cputils.write_file(CMD.output_path, scan_time, scan_data, False)
+                        LOGGER.info("Successfully archive %s scan from: %s" % (module, url))
+
+        else:
+            LOGGER.warn("Failed to connect to %s" % url)
+
+        if not cputils.check_path_exist(CMD.output_path, scan_time, scan_data['scan']['server_hostname']):
+            url = "%s:%d/v1/servers/%s" % (self.api.base_url, self.api.port, server_id)
             (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
             while (data is None) and (count < 4):
                 self.api.authenticateClient()
@@ -119,41 +149,10 @@ class ArchiveData:
                     LOGGER.info("Successfully retreive server issue from %s" % url)
                 count += 1
             if data:
-                scan_data = json.loads(data)
-                if 'scan' in scan_data:
-                    findings = scan_data['scan']['findings']
-                    scan_time = dateutil.parser.parse(scan_data['scan']['created_at'])
-                    if findings:
-                        for finding in findings:
-                            if finding['status'] == 'bad':
-                                new_findings.append(finding)
-                        if new_findings:
-                            if module == 'svm':
-                                for new_finding in new_findings:
-                                    new_finding['age'] = self.get_sva_duration(new_finding['package_name'], scan_data['id'])
-                            scan_data['scan']['findings'] = new_findings
-                            cputils.write_file(CMD.output_path, scan_time, scan_data, False)
-                            LOGGER.info("Successfully archive %s scan from: %s" % (module, url))
-
-            else:
-                LOGGER.warn("Failed to connect to %s" % url)
-
-            if not cputils.check_path_exist(CMD.output_path, scan_time, scan_data['scan']['server_hostname']):
-                url = "%s:%d/v1/servers/%s" % (self.api.base_url, self.api.port, server_id)
-                (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
-                while (data is None) and (count < 4):
-                    self.api.authenticateClient()
-                    LOGGER.warn(err_msg)
-                    LOGGER.warn("retry: %d time" % count + "on %s" % url)
-                    (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
-                    if data:
-                        LOGGER.info("Successfully retreive server issue from %s" % url)
-                    count += 1
-                if data:
-                    server_data = json.loads(data)
-                    if 'server' in server_data:
-                        cputils.write_file(CMD.output_path, scan_time, server_data, True)
-                        LOGGER.info("Successfully retreive server data from %s" % server_id)    
+                server_data = json.loads(data)
+                if 'server' in server_data:
+                    cputils.write_file(CMD.output_path, scan_time, server_data, True)
+                    LOGGER.info("Successfully retreive server data from %s" % server_id)    
         return None
 
     def get_sva_duration(self, name, agent_id):
@@ -194,8 +193,8 @@ class ArchiveData:
 
     def multi_threading(self, function, arg1, arg2):
         threads = []
-        for i in range(2):
-            thread = threading.Thread(target=function, args=(arg1, arg2))
+        for i in arg1:
+            thread = threading.Thread(target=function, args=(i, arg2))
             threads.append(thread)
             thread.start()
         return thread
