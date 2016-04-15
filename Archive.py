@@ -105,6 +105,8 @@ class ArchiveData:
         return server_list
 
     def get_server_module(self, server_id, module):
+        print module
+        print server_id
         new_findings = []
         count = 1
         url = "%s:%d/v1/servers/%s/%s" % (self.api.base_url, self.api.port, server_id, module)
@@ -197,7 +199,14 @@ class ArchiveData:
             thread = threading.Thread(target=function, args=(i, arg2))
             threads.append(thread)
             thread.start()
+        thread.join()
         return thread
+
+    def chunk(self, length, number):
+        x = []
+        for i in xrange(0, len(length), number):
+            x.append(length[i:i+number])
+        return x 
 
     def run(self, cmd):
         threads = []
@@ -226,17 +235,19 @@ class ArchiveData:
             print "--- %s servers that have issues in sva ---" % (len(sva_server_list))
             LOGGER.info("--- %s servers that have issues in csm ---" % (len(csm_server_list)))
             LOGGER.info("--- %s servers that have issues in sva ---" % (len(sva_server_list)))
+            sva_chunks = self.chunk(sva_server_list, 10)
+            csm_chunks = self.chunk(csm_server_list, 10)
             for module in server_module:
                 print "Start archiving %s scan result" % module
                 temp = "t_%s" % module
+                count = 1 
                 if module == 'sca':
-                    temp = self.multi_threading(self.get_server_module, csm_server_list, module)
+                    for csm_chunk in csm_chunks:
+                        temp = self.multi_threading(self.get_server_module, csm_chunk, module)
                 else:
-                    temp = self.multi_threading(self.get_server_module, sva_server_list, module)
-                threads.append(temp)
+                    for sva_chunk in sva_chunks:
+                        temp = self.multi_threading(self.get_server_module, sva_chunk, module)
 
-        for thread in threads:
-            thread.join()
 
 if __name__ == "__main__":
     CMD = CmdLine()
