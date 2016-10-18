@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import sys
+import re
 import os
 import json
 import time
@@ -129,7 +130,10 @@ class ArchiveData:
                     if new_findings:
                         if module == 'svm':
                             for new_finding in new_findings:
-                                new_finding['age'] = self.get_sva_duration(new_finding['package_name'], scan_data['id'])
+                                new_finding['age'] = self.get_issue_duration("sva", new_finding['package_name'], scan_data['id'])
+                        if module == "sca":
+                            for new_finding in new_findings:
+                                new_finding['age'] = self.get_issue_duration("csm", new_finding['rule_name'], scan_data['id'])
                         scan_data['scan']['findings'] = new_findings
                         cputils.write_file(CMD.output_path, scan_time, scan_data, False)
                         LOGGER.info("Successfully archive %s scan from: %s" % (module, url))
@@ -140,20 +144,21 @@ class ArchiveData:
             LOGGER.warn("Failed to connect to %s" % url)
         return None
 
-    def get_sva_duration(self, name, agent_id):
+    def get_issue_duration(self, module, name, agent_id):
         count = 1
         duration = None
-        url = "%s:%d/v2/issues?issue_type=sva&name=%s&agent_id=%s" % (self.api.base_url, self.api.port, name, agent_id)
+        url = "%s:%d/v2/issues?issue_type=%s&name=%s&agent_id=%s" % (self.api.base_url, self.api.port, module, name, agent_id)
+        url = re.sub(r"\s+", '%20', url)
         (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
         while (data is None) and (count < 4):
             self.api.authenticateClient()
             LOGGER.warn(err_msg)
             LOGGER.warn("retry: %d time" % count + "on %s" % url)
             (data, auth_error, err_msg) = self.api.doGetRequest(url, self.api.authToken)
-            if data: 
+            if data:
                 LOGGER.info("Successfully retreive issue from %s" % url)
             count += 1
-        if data: 
+        if data:
             issue_data = json.loads(data)
             if 'issues' in issue_data:
                 issues = issue_data['issues']
@@ -176,7 +181,7 @@ class ArchiveData:
         x = []
         for i in xrange(0, len(length), number):
             x.append(length[i:i+number])
-        return x 
+        return x
 
     def run(self, cmd):
         threads = []
